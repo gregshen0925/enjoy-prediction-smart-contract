@@ -4,6 +4,8 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { ethers } = hre;
   const { deploy } = hre.deployments;
+  const chainId = await hre.getChainId();
+  if (chainId === '1') return;
   const { deployer } = await hre.getNamedAccounts();
   const decimals = 8;
   await deploy("MockV3Aggregator", {

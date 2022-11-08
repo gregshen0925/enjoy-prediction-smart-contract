@@ -1,6 +1,8 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "hardhat-deploy";
+import * as dotenv from "dotenv";
+dotenv.config();
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -22,25 +24,21 @@ const config: HardhatUserConfig = {
   networks: {
     // mainnet
     polygon: {
-      url: `https://polygon-mainnet.g.alchemy.com/v2/${process.env.POLYGON_API_KEY ?? ""}`,
+      url: process.env.POLYGON_URL,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
     // testnet
     mumbai: {
-      url: `https://polygon-mumbai.g.alchemy.com/v2/${process.env.POLYGON_MUMBAI_API_KEY ?? ""}`,
+      url: process.env.MUMBAI_URL,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
     // devnet
     hardhat: {
-      mining: {
-        auto: true,
-        interval: 1000,
-      },
-      chainId: 1337
+      chainId: 1337,
     },
   },
   etherscan: {
-    apiKey: process.env.POLYGON_API_KEY,
+    apiKey: process.env.POLYGONSCAN_API_KEY,
   },
 };
 
