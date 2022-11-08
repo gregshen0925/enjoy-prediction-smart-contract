@@ -182,12 +182,17 @@ contract EnJoyPrediction {
         }
     }
 
-    function currentStakeInfo(address player) public view returns (StakeInfo memory) {
-        (bool ifPredicted, uint256 serialNumber) = _playerStakeInfoMap[player].tryGet(_getCurrentTableId());
+    function currentStakeInfo(address player)
+        public
+        view
+        returns (StakeInfo memory)
+    {
+        (bool ifPredicted, uint256 serialNumber) = _playerStakeInfoMap[player]
+            .tryGet(_getCurrentTableId());
         if (ifPredicted) {
             return _deserializeStakeInfo(serialNumber);
         } else {
-            return StakeInfo(0,0);
+            return StakeInfo(0, 0);
         }
     }
 
