@@ -2,160 +2,210 @@
 pragma solidity ^0.8.13;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "./utils/EnumerableMap.sol";
 
 /**
  * @author InJoy Labs
  * @title A game about predicting the price of BTC
  */
 contract EnJoyPrediction {
-    error StakeAmountOutOfRange();
-    error CanNotPredict();
+    using EnumerableMap for EnumerableMap.UintToUintMap;
+
+    error StakeOutOfRange();
+    error AlreadyPredicted();
     error SettleTooEarly();
-    error NoClaimable();
 
-    struct Settings {
-        uint32 minStake;
-        uint32 maxStake;
-        uint32 timeInterval;
-        uint32 timeOffset;
+    uint32 private constant MIN_STAKE = 1_000_000; // 1 USDT
+
+    uint32 private constant MAX_STAKE = 5_000_000; // 5 USDT
+
+    uint32 private constant DAY_TIME_OFFSET = 11 * 60 * 60; // 7 p.m. UTC+8
+
+    struct StakeInfo {
+        uint32 stakeAmount;
+        uint8 prediction;
     }
 
-    struct PlayerInfo {
-        uint32 stage;
-        bool isClaimed;
-        uint8 currentPrediction;
-        uint8 previousPrediction;
-        uint32 currentStake;
-        uint32 previousStake;
-        uint128 totalClaim;
+    enum TableResult {
+        NULL,
+        LONG,
+        SHORT,
+        DRAW
     }
 
-    struct GlobalInfo {
-        uint32 stage;
-        uint8 settlement;
-        uint56 startPrice;
-        uint40 currentStakeForLong;
-        uint40 currentStakeForShort;
-        uint40 closedStakeForLong;
-        uint40 closedStakeForShort;
+    struct TableInfo {
+        TableResult result;
+        uint80 startPrice;
+        uint80 stakeForLong;
+        uint80 stakeForShort;
     }
-
-    Settings public settings;
-    GlobalInfo public globalInfo;
-    mapping(address => PlayerInfo) public playerInfoMap;
 
     IERC20 private immutable _usdt;
 
     AggregatorV3Interface private immutable _btcPriceFeed;
 
-    constructor(
-        IERC20 usdtAddress,
-        AggregatorV3Interface btcAggregator,
-        Settings memory initSettings,
-        uint32 initStage
-    ) {
+    mapping(address => EnumerableMap.UintToUintMap) private _playerStakeInfoMap;
+
+    mapping(uint256 => TableInfo) private _tableInfoMap;
+
+    constructor(IERC20 usdtAddress, AggregatorV3Interface btcAggregator) {
         _usdt = usdtAddress;
         _btcPriceFeed = btcAggregator;
-        settings = initSettings;
-        globalInfo.stage = initStage;
     }
+
+    /**
+     * Execution Functions
+     */
 
     /// @dev Predict BTC price with certain amount of USDT
-    function predict(uint8 prediction, uint32 stakeAmount) public {
-        Settings memory s = settings;
-        PlayerInfo storage pInfo = playerInfoMap[msg.sender];
-        GlobalInfo storage gInfo = globalInfo;
-        if (stakeAmount < s.minStake || stakeAmount > s.maxStake)
-            revert StakeAmountOutOfRange();
-        if (pInfo.stage >= gInfo.stage) 
-            revert CanNotPredict();
-        uint64 claimableAmount = getClaimableAmount();
-        if (claimableAmount > 0) {
-            _usdt.transfer(msg.sender, claimableAmount);
-            pInfo.totalClaim += claimableAmount;
-        }
-        pInfo.stage = gInfo.stage;
-        pInfo.previousPrediction = pInfo.currentPrediction;
-        pInfo.currentPrediction = prediction;
+    function predict(bool predictLong, uint32 stakeAmount) public {
+        uint256 tableId = _getCurrentTableId();
+        // checks
+        if (stakeAmount > MAX_STAKE || stakeAmount < MIN_STAKE)
+            revert StakeOutOfRange();
+        if (_playerStakeInfoMap[msg.sender].contains(tableId))
+            revert AlreadyPredicted();
+
+        // get current table info
+        TableInfo storage tableInfo = _tableInfoMap[tableId];
+
+        // stake USDT to contract
         _usdt.transferFrom(msg.sender, address(this), stakeAmount);
-        pInfo.previousStake = pInfo.currentStake;
-        pInfo.currentStake = stakeAmount;
-        if (prediction == 1) {
-            gInfo.currentStakeForLong += stakeAmount;
-        } else {
-            gInfo.currentStakeForShort += stakeAmount;
-        }
+
+        // update table info
+        if (predictLong) tableInfo.stakeForLong += stakeAmount;
+        else tableInfo.stakeForShort += stakeAmount;
+
+        // add stake info to player's profolio
+        uint256 serialNumber = _serializeStakeInfo(
+            StakeInfo(
+                stakeAmount,
+                predictLong ? uint8(TableResult.LONG) : uint8(TableResult.SHORT)
+            )
+        );
+        _playerStakeInfoMap[msg.sender].set(tableId, serialNumber);
     }
 
-    /// @dev Claim reward if predict correctly
+    /// @dev Claim reward given table IDs
     function claim() public {
-        uint64 claimableAmount = getClaimableAmount();
-        PlayerInfo storage pInfo = playerInfoMap[msg.sender];
-        if (claimableAmount > 0) {
-            _usdt.transfer(msg.sender, claimableAmount);
-            pInfo.totalClaim += claimableAmount;
-            pInfo.stage = globalInfo.stage + 1;
-        } else {
-            revert NoClaimable();
+        EnumerableMap.UintToUintMap storage stakeInfoMap = _playerStakeInfoMap[
+            msg.sender
+        ];
+        uint256 mapSize = stakeInfoMap.length();
+        uint80 claimableReward = 0;
+        for (uint256 i = 0; i < mapSize; ++i) {
+            (uint256 tableId, uint256 serialNumber) = stakeInfoMap.at(i);
+            StakeInfo memory stakeInfo = _deserializeStakeInfo(serialNumber);
+            TableInfo memory tableInfo = _tableInfoMap[tableId];
+            if (tableInfo.result == TableResult.DRAW) {
+                claimableReward += stakeInfo.stakeAmount;
+                stakeInfoMap.remove(tableId);
+            } else {
+                uint80 totalStake = tableInfo.stakeForLong +
+                    tableInfo.stakeForShort;
+                uint80 shareStake = tableInfo.result == TableResult.LONG
+                    ? tableInfo.stakeForLong
+                    : tableInfo.stakeForShort;
+                if (stakeInfo.prediction == uint8(tableInfo.result)) {
+                    claimableReward +=
+                        (stakeInfo.stakeAmount * totalStake) /
+                        shareStake;
+                    stakeInfoMap.remove(tableId);
+                }
+            }
         }
+
+        // transfer reward to player
+        _usdt.transfer(msg.sender, claimableReward);
     }
 
     /// @dev Settle the result using Chainlink oracle
     function settle() public {
-        if (block.timestamp < getNextSettlingTimestamp())
+        uint256 tableId = _getCurrentTableId();
+        TableInfo storage currentTableInfo = _tableInfoMap[tableId];
+        TableInfo storage waitingTableInfo = _tableInfoMap[tableId - 2];
+
+        // check if current table has already created
+        if (currentTableInfo.result != TableResult.NULL)
             revert SettleTooEarly();
+
+        // fetch BTC price from Chainlink oracle
         (, int256 price, , , ) = _btcPriceFeed.latestRoundData();
-        uint56 currPrice = uint56(uint256(price));
-        GlobalInfo storage gInfo = globalInfo;
-        gInfo.stage++;
-        uint40 totalStake = gInfo.currentStakeForLong + gInfo.currentStakeForShort; 
-        gInfo.closedStakeForLong = gInfo.currentStakeForLong;
-        gInfo.closedStakeForShort = gInfo.currentStakeForShort;
-        // long win
-        if (currPrice > gInfo.startPrice) {
-            gInfo.settlement = 1;
-        }
-        // short win
-        else if (currPrice < gInfo.startPrice) {
-            gInfo.settlement = 2;
-        }
-        // draw
-        else {
-            gInfo.settlement = 0;
-        }
-        uint40 halfRemainUSDT = (
-            uint40(_usdt.balanceOf(address(this))) - totalStake
-            ) / 2;
-        gInfo.currentStakeForLong = halfRemainUSDT;
-        gInfo.currentStakeForShort = halfRemainUSDT;
-        gInfo.startPrice = currPrice;
-    }
+        uint80 currPrice = uint80(uint256(price));
 
-    /// @dev Compute claimable USDT amount
-    function getClaimableAmount() public view returns (uint64) {
-        PlayerInfo memory pInfo = playerInfoMap[msg.sender];
-        GlobalInfo memory gInfo = globalInfo;
+        // set the start price of current table
+        currentTableInfo.startPrice = currPrice;
 
-        if (pInfo.stage == gInfo.stage) {
-            if (gInfo.settlement == 0) {
-                return pInfo.currentStake;
-            } else if (gInfo.settlement == pInfo.currentPrediction) {
-                uint40 numerator = gInfo.closedStakeForLong + gInfo.closedStakeForShort;
-                uint40 denominator = gInfo.settlement == 1 ?
-                    gInfo.closedStakeForLong:
-                    gInfo.closedStakeForShort;
-                return (uint64(pInfo.currentStake) * numerator) / denominator;
-            } else {
-                return 0;
-            }
+        // settle the result of waiting table
+        uint80 previousStartPrice = waitingTableInfo.startPrice;
+        if (currPrice > previousStartPrice) {
+            waitingTableInfo.result = TableResult.LONG;
+        } else if (currPrice < previousStartPrice) {
+            waitingTableInfo.result = TableResult.SHORT;
         } else {
-            return 0;
+            waitingTableInfo.result = TableResult.DRAW;
         }
     }
 
-    /// @dev Map global stage to next settling timestamp
-    function getNextSettlingTimestamp() public view returns (uint256) {
-        Settings memory s = settings;
-        return ((globalInfo.stage + 1) * s.timeInterval) + s.timeOffset;
+    /**
+     * Query Functions
+     */
+
+    /// @dev compute unclaimed reward given player
+    function unclaimReward(address player)
+        public
+        view
+        returns (uint80 claimableReward)
+    {
+        EnumerableMap.UintToUintMap storage stakeInfoMap = _playerStakeInfoMap[
+            player
+        ];
+        uint256 mapSize = stakeInfoMap.length();
+        claimableReward = 0;
+        for (uint256 i = 0; i < mapSize; ++i) {
+            (uint256 tableId, uint256 serialNumber) = stakeInfoMap.at(i);
+            StakeInfo memory stakeInfo = _deserializeStakeInfo(serialNumber);
+            TableInfo memory tableInfo = _tableInfoMap[tableId];
+            if (tableInfo.result == TableResult.DRAW) {
+                claimableReward += stakeInfo.stakeAmount;
+            } else {
+                uint80 totalStake = tableInfo.stakeForLong +
+                    tableInfo.stakeForShort;
+                uint80 shareStake = tableInfo.result == TableResult.LONG
+                    ? tableInfo.stakeForLong
+                    : tableInfo.stakeForShort;
+                if (stakeInfo.prediction == uint8(tableInfo.result))
+                    claimableReward +=
+                        (stakeInfo.stakeAmount * totalStake) /
+                        shareStake;
+            }
+        }
+    }
+
+    function ifPredicted(address player) public view returns (bool) {
+        return _playerStakeInfoMap[player].contains(_getCurrentTableId());
+    }
+
+    function _deserializeStakeInfo(uint256 serialNumber)
+        private
+        pure
+        returns (StakeInfo memory stakeInfo)
+    {
+        stakeInfo.prediction = uint8(serialNumber);
+        serialNumber >>= 8;
+        stakeInfo.stakeAmount = uint32(serialNumber);
+    }
+
+    function _serializeStakeInfo(StakeInfo memory stakeInfo)
+        private
+        pure
+        returns (uint256 serialNumber)
+    {
+        serialNumber = uint256(stakeInfo.stakeAmount);
+        serialNumber = (serialNumber << 8) | stakeInfo.prediction;
+    }
+
+    function _getCurrentTableId() private view returns (uint256) {
+        return block.timestamp - DAY_TIME_OFFSET / (1 days);
     }
 }

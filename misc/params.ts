@@ -1,31 +1,3 @@
-export type Settings = {
-    minStake: number,
-    maxStake: number,
-    timeInterval: number,    
-    timeOffset: number,
-};
-
-export const settingsMap: Record<string, Settings> = {
-    '1337': {
-        minStake: 1_000_000, // 1 USDT
-        maxStake: 5_000_000, // 5 USDT
-        timeInterval: 60 * 5, // 5 mins 
-        timeOffset: 0, // 11 hr (11 + 8 = 19 = 7 p.m.)
-    },
-    '80001': {
-        minStake: 1_000_000, // 1 USDT
-        maxStake: 5_000_000, // 5 USDT
-        timeInterval: 60 * 5, // 5 mins 
-        timeOffset: 0, // 11 hr (11 + 8 = 19 = 7 p.m.)
-    },
-    '137': {
-        minStake: 1_000_000, // 1 USDT
-        maxStake: 5_000_000, // 5 USDT
-        timeInterval: 60 * 60 * 24, // 1 day 
-        timeOffset: 60 * 60 * 11, // 11 hr (11 + 8 = 19 = 7 p.m.)
-    },
-};
-
 export const usdtAddressMap: Record<string, string> = {
     '1337': "0x5FbDB2315678afecb367f032d93F642f64180aa3",
     '80001': "0xA02f6adc7926efeBBd59Fd43A84f4E0c0c91e832",
