@@ -5,15 +5,12 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "./utils/EnumerableMap.sol";
 
 /**
- * @author InJoy Labs
+ * @author InJoy Labs (https://injoylabs.io/)
  * @title A game about predicting the price of BTC
  */
 contract EnJoyPrediction {
-    using EnumerableMap for EnumerableMap.UintToUintMap;
-
-    error StakeOutOfRange();
-    error AlreadyPredicted();
-    error SettleTooEarly();
+    // uint-to-uint enumerable map
+    using EnumerableMap for EnumerableMap.U2UMap;
 
     uint32 private constant MIN_STAKE = 1_000_000; // 1 USDT
 
@@ -21,11 +18,13 @@ contract EnJoyPrediction {
 
     uint32 private constant DAY_TIME_OFFSET = 11 * 60 * 60; // 7 p.m. UTC+8
 
+    /// @dev Player's stake info given table
     struct StakeInfo {
         uint32 stakeAmount;
         uint8 prediction;
     }
 
+    /// @dev Table result state
     enum TableResult {
         NULL,
         LONG,
@@ -33,6 +32,7 @@ contract EnJoyPrediction {
         DRAW
     }
 
+    /// @dev Table's info given table ID (global storage)
     struct TableInfo {
         TableResult result;
         uint80 startPrice;
@@ -40,14 +40,19 @@ contract EnJoyPrediction {
         uint80 stakeForShort;
     }
 
+    /// @dev USDT contract
     IERC20 private immutable _usdt;
 
+    /// @dev Chainlink BTC price feed oracle
     AggregatorV3Interface private immutable _btcPriceFeed;
 
-    mapping(address => EnumerableMap.UintToUintMap) private _stakeInfoMapOf;
+    /// @dev Player => (TableID => StakeInfo)
+    mapping(address => EnumerableMap.U2UMap) private _stakeInfoMapOf;
 
+    /// @dev TableID => TableInfo
     mapping(uint256 => TableInfo) private _tableInfoMap;
 
+    /// @dev Connect USDT contract and BTC oracle
     constructor(IERC20 usdtAddress, AggregatorV3Interface btcAggregator) {
         _usdt = usdtAddress;
         _btcPriceFeed = btcAggregator;
@@ -61,10 +66,14 @@ contract EnJoyPrediction {
     function predict(bool predictLong, uint32 stakeAmount) public {
         uint256 tableId = _getCurrentTableId();
         // checks
-        if (stakeAmount > MAX_STAKE || stakeAmount < MIN_STAKE)
-            revert StakeOutOfRange();
-        if (_stakeInfoMapOf[msg.sender].contains(tableId))
-            revert AlreadyPredicted();
+        require(
+            stakeAmount <= MAX_STAKE && stakeAmount >= MIN_STAKE,
+            "stake out of range"
+        );
+        require(
+            !_stakeInfoMapOf[msg.sender].contains(tableId),
+            "already predicted"
+        );
 
         // get current table info
         TableInfo storage tableInfo = _tableInfoMap[tableId];
@@ -88,9 +97,7 @@ contract EnJoyPrediction {
 
     /// @dev Claim reward given table IDs
     function claim() public {
-        EnumerableMap.UintToUintMap storage stakeInfoMap = _stakeInfoMapOf[
-            msg.sender
-        ];
+        EnumerableMap.U2UMap storage stakeInfoMap = _stakeInfoMapOf[msg.sender];
         uint256 mapSize = stakeInfoMap.length();
         uint80 claimableReward = 0;
         for (uint256 i = 0; i < mapSize; ++i) {
@@ -126,8 +133,7 @@ contract EnJoyPrediction {
         TableInfo storage waitingTableInfo = _tableInfoMap[tableId - 2];
 
         // check if current table has already created
-        if (currentTableInfo.result != TableResult.NULL)
-            revert SettleTooEarly();
+        require(currentTableInfo.startPrice == 0, "settle too early");
 
         // fetch BTC price from Chainlink oracle
         (, int256 price, , , ) = _btcPriceFeed.latestRoundData();
@@ -157,9 +163,7 @@ contract EnJoyPrediction {
         view
         returns (uint80 claimableReward)
     {
-        EnumerableMap.UintToUintMap storage stakeInfoMap = _stakeInfoMapOf[
-            player
-        ];
+        EnumerableMap.U2UMap storage stakeInfoMap = _stakeInfoMapOf[player];
         uint256 mapSize = stakeInfoMap.length();
         claimableReward = 0;
         for (uint256 i = 0; i < mapSize; ++i) {

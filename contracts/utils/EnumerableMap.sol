@@ -6,7 +6,7 @@ pragma solidity ^0.8.13;
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 /**
- * @dev Same as openzeppelin one but with UintToUintMap Implementation
+ * @dev Same as openzeppelin one but with uint-to-uint Implementation
  */
 library EnumerableMap {
     using EnumerableSet for EnumerableSet.Bytes32Set;
@@ -55,7 +55,11 @@ library EnumerableMap {
     /**
      * @dev Returns true if the key is in the map. O(1).
      */
-    function _contains(Map storage map, bytes32 key) private view returns (bool) {
+    function _contains(Map storage map, bytes32 key)
+        private
+        view
+        returns (bool)
+    {
         return map._keys.contains(key);
     }
 
@@ -76,7 +80,11 @@ library EnumerableMap {
      *
      * - `index` must be strictly less than {length}.
      */
-    function _at(Map storage map, uint256 index) private view returns (bytes32, bytes32) {
+    function _at(Map storage map, uint256 index)
+        private
+        view
+        returns (bytes32, bytes32)
+    {
         bytes32 key = map._keys.at(index);
         return (key, map._values[key]);
     }
@@ -85,7 +93,11 @@ library EnumerableMap {
      * @dev Tries to returns the value associated with `key`.  O(1).
      * Does not revert if `key` is not in the map.
      */
-    function _tryGet(Map storage map, bytes32 key) private view returns (bool, bytes32) {
+    function _tryGet(Map storage map, bytes32 key)
+        private
+        view
+        returns (bool, bytes32)
+    {
         bytes32 value = map._values[key];
         if (value == bytes32(0)) {
             return (_contains(map, key), bytes32(0));
@@ -103,7 +115,10 @@ library EnumerableMap {
      */
     function _get(Map storage map, bytes32 key) private view returns (bytes32) {
         bytes32 value = map._values[key];
-        require(value != 0 || _contains(map, key), "EnumerableMap: nonexistent key");
+        require(
+            value != 0 || _contains(map, key),
+            "EnumerableMap: nonexistent key"
+        );
         return value;
     }
 
@@ -123,9 +138,9 @@ library EnumerableMap {
         return value;
     }
 
-    // UintToUintMap
+    // U2UMap
 
-    struct UintToUintMap {
+    struct U2UMap {
         Map _inner;
     }
 
@@ -137,7 +152,7 @@ library EnumerableMap {
      * already present.
      */
     function set(
-        UintToUintMap storage map,
+        U2UMap storage map,
         uint256 key,
         uint256 value
     ) internal returns (bool) {
@@ -149,21 +164,25 @@ library EnumerableMap {
      *
      * Returns true if the key was removed from the map, that is if it was present.
      */
-    function remove(UintToUintMap storage map, uint256 key) internal returns (bool) {
+    function remove(U2UMap storage map, uint256 key) internal returns (bool) {
         return _remove(map._inner, bytes32(key));
     }
 
     /**
      * @dev Returns true if the key is in the map. O(1).
      */
-    function contains(UintToUintMap storage map, uint256 key) internal view returns (bool) {
+    function contains(U2UMap storage map, uint256 key)
+        internal
+        view
+        returns (bool)
+    {
         return _contains(map._inner, bytes32(key));
     }
 
     /**
      * @dev Returns the number of elements in the map. O(1).
      */
-    function length(UintToUintMap storage map) internal view returns (uint256) {
+    function length(U2UMap storage map) internal view returns (uint256) {
         return _length(map._inner);
     }
 
@@ -176,7 +195,11 @@ library EnumerableMap {
      *
      * - `index` must be strictly less than {length}.
      */
-    function at(UintToUintMap storage map, uint256 index) internal view returns (uint256, uint256) {
+    function at(U2UMap storage map, uint256 index)
+        internal
+        view
+        returns (uint256, uint256)
+    {
         (bytes32 key, bytes32 value) = _at(map._inner, index);
         return (uint256(key), uint256(value));
     }
@@ -187,7 +210,11 @@ library EnumerableMap {
      *
      * _Available since v3.4._
      */
-    function tryGet(UintToUintMap storage map, uint256 key) internal view returns (bool, uint256) {
+    function tryGet(U2UMap storage map, uint256 key)
+        internal
+        view
+        returns (bool, uint256)
+    {
         (bool success, bytes32 value) = _tryGet(map._inner, bytes32(key));
         return (success, uint256(value));
     }
@@ -199,21 +226,11 @@ library EnumerableMap {
      *
      * - `key` must be in the map.
      */
-    function get(UintToUintMap storage map, uint256 key) internal view returns (uint256) {
+    function get(U2UMap storage map, uint256 key)
+        internal
+        view
+        returns (uint256)
+    {
         return uint256(_get(map._inner, bytes32(key)));
-    }
-
-    /**
-     * @dev Same as {get}, with a custom error message when `key` is not in the map.
-     *
-     * CAUTION: This function is deprecated because it requires allocating memory for the error
-     * message unnecessarily. For custom revert reasons use {tryGet}.
-     */
-    function get(
-        UintToUintMap storage map,
-        uint256 key,
-        string memory errorMessage
-    ) internal view returns (uint256) {
-        return uint256(_get(map._inner, bytes32(key), errorMessage));
     }
 }
