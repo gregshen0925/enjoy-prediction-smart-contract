@@ -35,9 +35,10 @@ contract EnJoyPrediction {
     /// @dev Table's info given table ID (global storage)
     struct TableInfo {
         TableResult result;
-        uint80 startPrice;
+        uint64 startPrice;
         uint80 stakeForLong;
         uint80 stakeForShort;
+        uint24 playerCount;
     }
 
     /// @dev USDT contract
@@ -93,6 +94,9 @@ contract EnJoyPrediction {
             )
         );
         _stakeInfoMapOf[msg.sender].set(tableId, serialNumber);
+
+        // increase player count by one
+        ++tableInfo.playerCount;
     }
 
     /// @dev Claim reward given table IDs
@@ -123,7 +127,7 @@ contract EnJoyPrediction {
         }
 
         // transfer reward to player
-        _usdt.transfer(msg.sender, claimableReward);
+        _usdt.transfer(msg.sender, (claimableReward * 99) / 100);
     }
 
     /// @dev Settle the result using Chainlink oracle
@@ -137,13 +141,13 @@ contract EnJoyPrediction {
 
         // fetch BTC price from Chainlink oracle
         (, int256 price, , , ) = _btcPriceFeed.latestRoundData();
-        uint80 currPrice = uint80(uint256(price));
+        uint64 currPrice = uint64(uint256(price));
 
         // set the start price of current table
         currentTableInfo.startPrice = currPrice;
 
         // settle the result of waiting table
-        uint80 previousStartPrice = waitingTableInfo.startPrice;
+        uint64 previousStartPrice = waitingTableInfo.startPrice;
         if (currPrice > previousStartPrice) {
             waitingTableInfo.result = TableResult.LONG;
         } else if (currPrice < previousStartPrice) {
@@ -151,6 +155,11 @@ contract EnJoyPrediction {
         } else {
             waitingTableInfo.result = TableResult.DRAW;
         }
+
+        // transfer reward to settler to covering the gas fee
+        uint80 reward = (waitingTableInfo.stakeForLong +
+            waitingTableInfo.stakeForLong) / 100;
+        _usdt.transfer(msg.sender, reward);
     }
 
     /**
@@ -241,6 +250,6 @@ contract EnJoyPrediction {
 
     /// @dev get table ID given timestamp
     function _getTableId(uint256 timestamp) private pure returns (uint256) {
-        return timestamp - DAY_TIME_OFFSET / (1 days);
+        return (timestamp - DAY_TIME_OFFSET) / (1 days);
     }
 }
