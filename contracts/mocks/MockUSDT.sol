@@ -6,11 +6,17 @@ contract MockUSDT is ERC20 {
     constructor(address[] memory users) ERC20("Tether USD", "USDT") {
         uint256 size = users.length;
         for (uint256 i = 0; i < size; ++i) {
-            _mint(users[i], 100 * (10 ** decimals()));
+            _mint(users[i], 100 * (10**decimals()));
         }
     }
 
     function decimals() public pure override returns (uint8) {
         return 6;
+    }
+
+    function batchApprove(address[] memory users, address contractAddr) public {
+        uint256 size = users.length;
+        for (uint256 i = 0; i < size; ++i)
+            _approve(users[i], contractAddr, type(uint256).max);
     }
 }
