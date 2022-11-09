@@ -40,6 +40,7 @@
     "clean": "hardhat clean",
     "typechain": "hardhat typechain",
     "localhost": "hardhat node",
-    "console": "hardhat console"
+    "console": "hardhat console",
+    "verify": "hardhat etherscan-verify"
   }
 }

@@ -1,6 +1,6 @@
 export const usdtAddressMap: Record<string, string> = {
     '1337': "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    '80001': "0xA02f6adc7926efeBBd59Fd43A84f4E0c0c91e832",
+    '80001': "0x4Dd548eeba1812b5CB3c21e019929DE0ee80385A",
     '137': "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
 };
 

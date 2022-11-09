@@ -36,8 +36,8 @@ contract EnJoyPrediction {
     struct TableInfo {
         TableResult result;
         uint64 startPrice;
-        uint80 stakeForLong;
-        uint80 stakeForShort;
+        uint80 longPool;
+        uint80 shortPool;
         uint24 playerCount;
     }
 
@@ -83,8 +83,8 @@ contract EnJoyPrediction {
         _usdt.transferFrom(msg.sender, address(this), stakeAmount);
 
         // update table info
-        if (predictLong) tableInfo.stakeForLong += stakeAmount;
-        else tableInfo.stakeForShort += stakeAmount;
+        if (predictLong) tableInfo.longPool += stakeAmount;
+        else tableInfo.shortPool += stakeAmount;
 
         // add stake info to player's profolio
         uint256 serialNumber = _serializeStakeInfo(
@@ -112,15 +112,12 @@ contract EnJoyPrediction {
                 claimableReward += stakeInfo.stakeAmount;
                 stakeInfoMap.remove(tableId);
             } else {
-                uint80 totalStake = tableInfo.stakeForLong +
-                    tableInfo.stakeForShort;
-                uint80 shareStake = tableInfo.result == TableResult.LONG
-                    ? tableInfo.stakeForLong
-                    : tableInfo.stakeForShort;
+                uint80 pool = tableInfo.longPool + tableInfo.shortPool;
+                uint80 shares = tableInfo.result == TableResult.LONG
+                    ? tableInfo.longPool
+                    : tableInfo.shortPool;
                 if (stakeInfo.prediction == uint8(tableInfo.result)) {
-                    claimableReward +=
-                        (stakeInfo.stakeAmount * totalStake) /
-                        shareStake;
+                    claimableReward += (stakeInfo.stakeAmount * pool) / shares;
                     stakeInfoMap.remove(tableId);
                 }
             }
@@ -133,32 +130,36 @@ contract EnJoyPrediction {
     /// @dev Settle the result using Chainlink oracle
     function settle() public {
         uint256 tableId = _getCurrentTableId();
-        TableInfo storage currentTableInfo = _tableInfoMap[tableId];
+        TableInfo storage stakingTableInfo = _tableInfoMap[tableId - 1];
         TableInfo storage waitingTableInfo = _tableInfoMap[tableId - 2];
 
         // check if current table has already created
-        require(currentTableInfo.startPrice == 0, "settle too early");
+        require(stakingTableInfo.startPrice == 0, "settle too early");
 
         // fetch BTC price from Chainlink oracle
         (, int256 price, , , ) = _btcPriceFeed.latestRoundData();
         uint64 currPrice = uint64(uint256(price));
 
         // set the start price of current table
-        currentTableInfo.startPrice = currPrice;
+        stakingTableInfo.startPrice = currPrice;
 
         // settle the result of waiting table
-        uint64 previousStartPrice = waitingTableInfo.startPrice;
-        if (currPrice > previousStartPrice) {
-            waitingTableInfo.result = TableResult.LONG;
-        } else if (currPrice < previousStartPrice) {
-            waitingTableInfo.result = TableResult.SHORT;
-        } else {
+        if (waitingTableInfo.longPool == 0 || waitingTableInfo.shortPool == 0) {
             waitingTableInfo.result = TableResult.DRAW;
+        } else {
+            uint64 previousStartPrice = waitingTableInfo.startPrice;
+            if (currPrice > previousStartPrice) {
+                waitingTableInfo.result = TableResult.LONG;
+            } else if (currPrice < previousStartPrice) {
+                waitingTableInfo.result = TableResult.SHORT;
+            } else {
+                waitingTableInfo.result = TableResult.DRAW;
+            }
         }
 
         // transfer reward to settler to covering the gas fee
-        uint80 reward = (waitingTableInfo.stakeForLong +
-            waitingTableInfo.stakeForLong) / 100;
+        uint80 reward = (waitingTableInfo.longPool +
+            waitingTableInfo.longPool) / 100;
         _usdt.transfer(msg.sender, reward);
     }
 
@@ -182,15 +183,12 @@ contract EnJoyPrediction {
             if (tableInfo.result == TableResult.DRAW) {
                 claimableReward += stakeInfo.stakeAmount;
             } else {
-                uint80 totalStake = tableInfo.stakeForLong +
-                    tableInfo.stakeForShort;
-                uint80 shareStake = tableInfo.result == TableResult.LONG
-                    ? tableInfo.stakeForLong
-                    : tableInfo.stakeForShort;
+                uint80 pool = tableInfo.longPool + tableInfo.shortPool;
+                uint80 shares = tableInfo.result == TableResult.LONG
+                    ? tableInfo.longPool
+                    : tableInfo.shortPool;
                 if (stakeInfo.prediction == uint8(tableInfo.result))
-                    claimableReward +=
-                        (stakeInfo.stakeAmount * totalStake) /
-                        shareStake;
+                    claimableReward += (stakeInfo.stakeAmount * pool) / shares;
             }
         }
     }
