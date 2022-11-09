@@ -24,12 +24,12 @@ const config: HardhatUserConfig = {
   networks: {
     // mainnet
     polygon: {
-      url: process.env.POLYGON_URL,
+      url: process.env.POLYGON_URL + "",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
     // testnet
     mumbai: {
-      url: process.env.MUMBAI_URL,
+      url: process.env.MUMBAI_URL + "",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
     // devnet
