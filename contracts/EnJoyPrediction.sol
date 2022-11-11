@@ -41,17 +41,25 @@ contract EnJoyPrediction {
         uint24 playerCount;
     }
 
+    event Predict(
+        address indexed player,
+        uint8 indexed prediction,
+        uint32 stakeAmount
+    );
+
+    event Claim(address indexed player, uint80 reward);
+
     /// @dev USDT contract
     IERC20 private immutable _usdt;
 
     /// @dev Chainlink BTC price feed oracle
     AggregatorV3Interface private immutable _btcPriceFeed;
 
-    /// @dev Player => (TableID => StakeInfo)
-    mapping(address => EnumerableMap.U2UMap) private _stakeInfoMapOf;
-
     /// @dev TableID => TableInfo
     mapping(uint256 => TableInfo) private _tableInfoMap;
+
+    /// @dev Player => (TableID => StakeInfo)
+    mapping(address => EnumerableMap.U2UMap) private _stakeInfoMapOf;
 
     /// @dev Connect USDT contract and BTC oracle
     constructor(IERC20 usdtAddress, AggregatorV3Interface btcAggregator) {
@@ -61,6 +69,9 @@ contract EnJoyPrediction {
 
     /**
      * Execution Functions
+     * - predict
+     * - claim
+     * - settle
      */
 
     /// @dev Predict BTC price with certain amount of USDT
@@ -87,16 +98,19 @@ contract EnJoyPrediction {
         else tableInfo.shortPool += stakeAmount;
 
         // add stake info to player's profolio
+        uint8 prediction = predictLong
+            ? uint8(TableResult.LONG)
+            : uint8(TableResult.SHORT);
         uint256 serialNumber = _serializeStakeInfo(
-            StakeInfo(
-                stakeAmount,
-                predictLong ? uint8(TableResult.LONG) : uint8(TableResult.SHORT)
-            )
+            StakeInfo(stakeAmount, prediction)
         );
         _stakeInfoMapOf[msg.sender].set(tableId, serialNumber);
 
         // increase player count by one
         ++tableInfo.playerCount;
+
+        // emit Predict event
+        emit Predict(msg.sender, prediction, stakeAmount);
     }
 
     /// @dev Claim reward given table IDs
@@ -125,6 +139,9 @@ contract EnJoyPrediction {
 
         // transfer reward to player
         _usdt.transfer(msg.sender, (claimableReward * 99) / 100);
+
+        // emit Claim event
+        emit Claim(msg.sender, claimableReward);
     }
 
     /// @dev Settle the result using Chainlink oracle
@@ -165,7 +182,36 @@ contract EnJoyPrediction {
 
     /**
      * Query Functions
+     * - getTableInfo
+     * - getPlayerStakeInfo
+     * - getPlayerUnclaimReward
      */
+    /// @dev get current stake for long and short
+    function getTableInfo(uint256 timestamp)
+        public
+        view
+        returns (TableInfo memory)
+    {
+        uint256 tableId = _getTableId(timestamp);
+        return _tableInfoMap[tableId];
+    }
+
+    /// @dev get current stake info of certain player
+    function getPlayerStakeInfo(address player, uint256 timestamp)
+        public
+        view
+        returns (StakeInfo memory)
+    {
+        uint256 tableId = _getTableId(timestamp);
+        (bool ifPredicted, uint256 serialNumber) = _stakeInfoMapOf[player]
+            .tryGet(tableId);
+        // return stake info if predicted
+        if (ifPredicted) {
+            return _deserializeStakeInfo(serialNumber);
+        } else {
+            return StakeInfo(0, 0);
+        }
+    }
 
     /// @dev compute unclaimed reward of certain player
     function getPlayerUnclaimReward(address player)
@@ -193,32 +239,9 @@ contract EnJoyPrediction {
         }
     }
 
-    /// @dev get current stake for long and short
-    function getTableInfo(uint256 timestamp)
-        public
-        view
-        returns (TableInfo memory)
-    {
-        uint256 tableId = _getTableId(timestamp);
-        return _tableInfoMap[tableId];
-    }
-
-    /// @dev get current stake info of certain player
-    function getPlayerStakeInfo(address player, uint256 timestamp)
-        public
-        view
-        returns (StakeInfo memory)
-    {
-        uint256 tableId = _getTableId(timestamp);
-        (bool ifPredicted, uint256 serialNumber) = _stakeInfoMapOf[player]
-            .tryGet(tableId);
-        // return stake info if predicted
-        if (ifPredicted) {
-            return _deserializeStakeInfo(serialNumber);
-        } else {
-            return StakeInfo(0, 0);
-        }
-    }
+    /**
+     * Internal functions
+     */
 
     /// @dev deserialize uint256 to StakeInfo struct
     function _deserializeStakeInfo(uint256 serialNumber)

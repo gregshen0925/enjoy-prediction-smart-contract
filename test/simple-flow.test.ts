@@ -54,6 +54,8 @@ describe("Simple Flow", function () {
         await (await oracleContract.updateAnswer(price.add(123))).wait();
         await expect(enjoyContract.connect(signers[3]).settle())
             .to.be.revertedWith("settle too early");
+        await (await enjoyContract.connect(signers[11]).predict(true, usdt(3))).wait();
+        await (await enjoyContract.connect(signers[4]).predict(false, usdt(3))).wait();
         await setBlockTimestamp(shiftDay(pivotTime, 1));
         await (await enjoyContract.connect(signers[9]).settle()).wait();
         // check table infos
@@ -72,6 +74,29 @@ describe("Simple Flow", function () {
         await (await enjoyContract.connect(signers[1]).claim()).wait();
         expect(await usdtContract.balanceOf(signers[1].address))
             .equal(BigNumber.from(usdt(5)).mul(99).div(100).add(usdt(99)));
-        expect(await usdtContract.balanceOf(signers[4].address)).equal(usdt(96));
+        expect(await usdtContract.balanceOf(signers[4].address)).equal(usdt(93));
+
+        // price down and settle
+        await (await oracleContract.updateAnswer(price.div(2))).wait();
+        await setBlockTimestamp(shiftDay(pivotTime, 2));
+        await (await enjoyContract.settle()).wait();
+        // check table infos
+        tableInfo = await enjoyContract.getTableInfo(pivotTime);
+        expect(tableInfo.result).equal(TableResult.SHORT);
+        tableInfo = await enjoyContract.getTableInfo(shiftDay(pivotTime, 1));
+        price = await oracleContract.latestAnswer();
+        expect(tableInfo.result).equal(TableResult.NULL);
+        expect(tableInfo.startPrice).equal(price);
+
+        // claim
+        expect(await enjoyContract.getPlayerUnclaimReward(signers[11].address))
+            .equal(usdt(0));
+        expect(await enjoyContract.getPlayerUnclaimReward(signers[4].address))
+            .equal(usdt(6));
+        await (await enjoyContract.connect(signers[4]).claim()).wait();
+        expect(await usdtContract.balanceOf(signers[11].address)).equal(usdt(97));
+        expect(await usdtContract.balanceOf(signers[4].address))
+            .equal(BigNumber.from(usdt(6)).mul(99).div(100).add(usdt(93)));
+
     });
 });
