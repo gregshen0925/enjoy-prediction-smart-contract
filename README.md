@@ -6,6 +6,9 @@ https://github.com/gregshen0925/enjoy-prediction-en
 ## Website
 https://enjoy-prediction.vercel.app
 
+## Mock USDT faucet
+https://mumbai.polygonscan.com/address/0x4Dd548eeba1812b5CB3c21e019929DE0ee80385A#writeContract#F5
+
 ## Inspiration
 As blockchain lovers and developers, we hope to promote blockchain education so that more people can participate in the world of web3.
 
