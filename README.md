@@ -1,7 +1,7 @@
 # EnJoy Predicition
 
 ## Frontend Repo
-https://github.com/gregshen0925/enjoy-prediction
+https://github.com/gregshen0925/enjoy-prediction-en
 
 ## Website
 https://enjoy-prediction.vercel.app
