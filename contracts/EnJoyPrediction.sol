@@ -16,7 +16,7 @@ contract EnJoyPrediction {
 
     uint32 private constant MAX_STAKE = 5_000_000; // 5 USDT
 
-    uint32 private constant DAY_TIME_OFFSET = 11 * 60 * 60; // 7 p.m. UTC+8
+    uint32 private constant DAY_TIME_OFFSET = 13 * 60 * 60; // 9 p.m. UTC+8
 
     /// @dev Player's stake info given table
     struct StakeInfo {
